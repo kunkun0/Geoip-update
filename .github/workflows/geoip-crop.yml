@@ -1,10 +1,14 @@
-name: Auto Crop CN-Only GeoIP
+name: Auto Update CN GeoIP
 
-于:
+on:
   schedule:
-    # 每周一凌晨 03:00 (UTC 19:00) 自动更新编译（GeoIP 无需每天更新，每周一次足够）
+    # 每周一凌晨 03:00 (UTC 19:00) 自动同步更新
     - cron: '0 19 * * 0'
-  workflow_dispatch: # 支持在 GitHub 页面手动点击立即触发
+  workflow_dispatch: # 支持手动点击 Run workflow 触发
+
+# 关键：显式声明写权限，防止 git push 时出现 403 错误
+permissions:
+  contents: write
 
 jobs:
   build-cn-geoip:
@@ -19,34 +23,29 @@ jobs:
         with:
           python-version: '3.10'
 
-     - name: Install Dependencies
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install maxminddb mmdb-writer
 
-      - name: Run Crop Script
-        run: python crop_geoip.py
-
-      - name: Build CN-Only MMDB File
+      - name: Fetch and Build GeoIP Files
         run: |
-          # 使用预装好的 mmdbctl 或第三方编译工具打包纯净版 GeoIP
-          # 这里利用极速转换，如果缺少工具，也可直接发布精简版 txt/mmdb 规则
-          if [ -f ~/go/bin/mmdbwriter ]; then
-             echo "正在编译超轻量 GeoIP-CN.mmdb..."
-          fi
+          # 1. 直接拉取 Loyalsoldier 上游官方发布的纯 CN 版 mmdb
+          curl -sSL "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country-only-cn-private.mmdb" -o GeoIP-CN.mmdb
+          
+          # 2. 运行 Python 脚本生成 txt 格式网段列表 (如果需要)
+          python crop_geoip.py || true
 
       - name: Commit and Push Changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-          # 清理临时原始文件
-          rm -f geoip_raw.mmdb
-
+          # 检查生成的文件是否有变动
           if git diff --quiet GeoIP-CN.mmdb cn_ip.txt 2>/dev/null; then
             echo "GeoIP 数据无变化，跳过提交。"
           else
-            git add GeoIP-CN.mmdb cn_ip.txt 2>/dev/null || git add cn_ip.txt
+            git add GeoIP-CN.mmdb cn_ip.txt 2>/dev/null || git add GeoIP-CN.mmdb
             git commit -m "auto: 更新 CN 专属精简 GeoIP 数据库 [$(date -u +'%Y-%m-%d')]"
             git push
           fi
