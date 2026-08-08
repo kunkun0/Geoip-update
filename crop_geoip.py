@@ -3,8 +3,12 @@ import urllib.request
 import maxminddb
 import ipaddress
 
-# 上游 GeoIP 数据库地址 (这里使用社区高度维护的包含最新 IPv4/IPv6 CN 网段的数据源)
-GEOIP_URL = "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/geoip.mmdb"
+# 更换为稳定可靠的 GitHub Raw 源（Loyalsoldier 的最新 mmdb 文件准确路径）
+GEOIP_URL = "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb"
+
+# 如果上面那个在中国大陆/Actions 节点偶尔超时，也可以使用 jsDelivr CDN 加速源：
+# GEOIP_URL = "https://cdn.jsdelivr.net/gh/Loyalsoldier/geoip@release/Country.mmdb"
+
 INPUT_FILE = "geoip_raw.mmdb"
 OUTPUT_FILE = "GeoIP-CN.mmdb"
 
