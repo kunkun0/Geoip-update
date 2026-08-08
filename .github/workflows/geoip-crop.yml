@@ -1,6 +1,6 @@
 name: Auto Merge Multi-Source CN GeoIP
 
-on:
+于:
   schedule:
     # 每 2 天凌晨 03:00 (UTC 19:00) 自动抓取多源并重新打包
     - cron: '0 19 */2 * *'
@@ -22,10 +22,10 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
+    - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install maxminddb mmdb-writer
+          pip install maxminddb mmdb-writer netaddr
 
       - name: Run Multi-Source Merge Script
         run: python crop_geoip.py
