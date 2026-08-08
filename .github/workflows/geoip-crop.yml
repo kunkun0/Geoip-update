@@ -1,17 +1,16 @@
-name: Auto Update CN GeoIP
+name: Auto Merge Multi-Source CN GeoIP
 
 on:
   schedule:
-    # 每周一凌晨 03:00 (UTC 19:00) 自动同步更新
-    - cron: '0 19 * * 0'
-  workflow_dispatch: # 支持手动点击 Run workflow 触发
+    # 每 2 天凌晨 03:00 (UTC 19:00) 自动抓取多源并重新打包
+    - cron: '0 19 */2 * *'
+  workflow_dispatch: # 支持手动点击运行
 
-# 关键：显式声明写权限，防止 git push 时出现 403 错误
 permissions:
   contents: write
 
 jobs:
-  build-cn-geoip:
+  build-multi-source-geoip:
     runs-on: ubuntu-latest
 
     steps:
@@ -28,24 +27,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install maxminddb mmdb-writer
 
-      - name: Fetch and Build GeoIP Files
-        run: |
-          # 1. 直接拉取 Loyalsoldier 上游官方发布的纯 CN 版 mmdb
-          curl -sSL "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country-only-cn-private.mmdb" -o GeoIP-CN.mmdb
-          
-          # 2. 运行 Python 脚本生成 txt 格式网段列表 (如果需要)
-          python crop_geoip.py || true
+      - name: Run Multi-Source Merge Script
+        run: python crop_geoip.py
 
       - name: Commit and Push Changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-          # 检查生成的文件是否有变动
-          if git diff --quiet GeoIP-CN.mmdb cn_ip.txt 2>/dev/null; then
+          # 清楚临时文件
+          rm -f tmp_*.mmdb
+
+          if git diff --quiet GeoIP-CN.mmdb 2>/dev/null; then
             echo "GeoIP 数据无变化，跳过提交。"
           else
-            git add GeoIP-CN.mmdb cn_ip.txt 2>/dev/null || git add GeoIP-CN.mmdb
-            git commit -m "auto: 更新 CN 专属精简 GeoIP 数据库 [$(date -u +'%Y-%m-%d')]"
+            git add GeoIP-CN.mmdb
+            git commit -m "auto: 整合多源最新 CN GeoIP 数据 [$(date -u +'%Y-%m-%d %H:%M UTC')]"
             git push
           fi
