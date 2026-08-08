@@ -1,6 +1,6 @@
 name: Auto Crop CN-Only GeoIP
 
-on:
+于:
   schedule:
     # 每周一凌晨 03:00 (UTC 19:00) 自动更新编译（GeoIP 无需每天更新，每周一次足够）
     - cron: '0 19 * * 0'
@@ -19,12 +19,10 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
+     - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install maxminddb
-          # 安装用于打包制作精简 .mmdb 的 Go 工具
-          go install github.com/maxmind/mmdbwriter/cmd/mmdbwriter@latest || true
+          pip install maxminddb mmdb-writer
 
       - name: Run Crop Script
         run: python crop_geoip.py
