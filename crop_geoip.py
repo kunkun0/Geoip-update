@@ -1,28 +1,29 @@
 import urllib.request
-import ipaddress
 import maxminddb
+import netaddr
 from mmdb_writer import MMDBWriter
 
-# 1. 多个权威数据源 (包含 MMDB 与 txt CIDR 列表)
+# 1. 替换为稳定高频更新的源 (移除失效的 ipverse 链接)
 SOURCES_TEXT = [
-    # ipverse 每日更新的中国 IPv4 & IPv6 列表
-    "https://raw.githubusercontent.com/ipverse/iptoasn-webservice/master/data/lookup/CN.txt",
-    # 极简高精度的中国 IP 网段文本
+    # 17mon 官方维护的中国 IP 列表
     "https://raw.githubusercontent.com/17mon/china_ip_list/master/china_ip_list.txt",
+    # gfwlist / 社区高频同步的 CN IP 列表
+    "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/ip-lists/china.txt",
 ]
 
 SOURCES_MMDB = [
     # Loyalsoldier 的 Country.mmdb
     "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb",
-    # P3TERX 维护的 GeoLite2 Country 源
+    # P3TERX 维护的 GeoLite2 源
     "https://raw.githubusercontent.com/P3TERX/GeoLite.mmdb/download/GeoLite2-Country.mmdb",
 ]
 
 def fetch_and_merge():
-    cn_networks = set()
+    # 使用 IPSet 可以自动合并重叠的子网，性能极高且天生去重
+    cn_ipset = netaddr.IPSet()
     headers = {'User-Agent': 'Mozilla/5.0'}
 
-    # ---- A. 从文本源拉取 CIDR ----
+    # ---- A. 处理文本源 ----
     for url in SOURCES_TEXT:
         try:
             print(f"⏬ 正在拉取文本数据源: {url}")
@@ -34,15 +35,14 @@ def fetch_and_merge():
                     if not line or line.startswith('#') or line.startswith('//'):
                         continue
                     try:
-                        net = ipaddress.ip_network(line, strict=False)
-                        cn_networks.add(net)
-                    except ValueError:
+                        cn_ipset.add(netaddr.IPNetwork(line))
+                    except Exception:
                         pass
-            print(f"  -> 当前已累计 {len(cn_networks)} 个网段")
+            print(f"  -> 当前累计包含 {len(cn_ipset.iter_cidrs())} 个 IP 网段")
         except Exception as e:
             print(f"⚠️ 拉取失败 ({url}): {e}")
 
-    # ---- B. 从 MMDB 源提取 CN 网段 ----
+    # ---- B. 处理 MMDB 源 ----
     for idx, url in enumerate(SOURCES_MMDB):
         tmp_file = f"tmp_{idx}.mmdb"
         try:
@@ -56,20 +56,23 @@ def fetch_and_merge():
                 if isinstance(data, dict):
                     code = data.get('country', {}).get('iso_code') or data.get('registered_country', {}).get('iso_code')
                     if code == 'CN':
-                        cn_networks.add(network)
+                        # 将 maxminddb 返回的网络转为 netaddr 对象追加进 IPSet
+                        cn_ipset.add(netaddr.IPNetwork(str(network)))
             reader.close()
-            print(f"  -> 当前已累计 {len(cn_networks)} 个网段")
+            print(f"  -> 当前累计包含 {len(cn_ipset.iter_cidrs())} 个 IP 网段")
         except Exception as e:
             print(f"⚠️ 解析失败 ({url}): {e}")
 
-    print(f"\n📊 整合完成！共去重汇总 {len(cn_networks)} 个 CN IP 网段。")
+    cidrs = cn_ipset.iter_cidrs()
+    print(f"\n📊 整合去重完成！最终生成 {len(cidrs)} 个标准 CIDR 网段。")
 
     # ---- C. 打包编译为标准的 GeoIP-CN.mmdb ----
     print("🔨 正在写入并构建 GeoIP-CN.mmdb ...")
     writer = MMDBWriter(ip_version=6)
 
-    for net in cn_networks:
-        writer.insert_network(net, {'country': {'iso_code': 'CN'}})
+    # 正确转换类型：mmdb_writer 接收 netaddr 的 IPNetwork / IPSet
+    for cidr in cidrs:
+        writer.insert_network(cidr, {'country': {'iso_code': 'CN'}})
 
     writer.to_db_file("GeoIP-CN.mmdb")
     print("✅ 纯净多源整合版 GeoIP-CN.mmdb 构建成功！")
