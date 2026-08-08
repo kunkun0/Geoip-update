@@ -2,7 +2,7 @@ import urllib.request
 import netaddr
 from mmdb_writer import MMDBWriter
 
-# 仅保留稳定更新的纯 IPv4 中国 CIDR 数据源
+# 选用的纯 IPv4 稳定数据源
 SOURCES_TEXT = [
     # 17mon 官方中国 IPv4 列表
     "https://raw.githubusercontent.com/17mon/china_ip_list/master/china_ip_list.txt",
@@ -11,7 +11,7 @@ SOURCES_TEXT = [
 ]
 
 def fast_merge():
-    print("⚡ 开始极速抓取与整合纯 IPv4 数据源...")
+    print("⚡ 开始抓取与整合纯 IPv4 数据源...")
     raw_cidrs = []
     headers = {'User-Agent': 'Mozilla/5.0'}
 
@@ -29,33 +29,33 @@ def fast_merge():
         except Exception as e:
             print(f"⚠️ 跳过源 ({url}): {e}")
 
-    print(f"📊 收集到原始 IPv4 网段 {len(raw_cidrs)} 条，开始批量解析去重...")
+    print(f"📊 收集到原始 IPv4 数据 {len(raw_cidrs)} 条，开始批量解析去重...")
 
     ip_networks = []
     for cidr in raw_cidrs:
         try:
             net = netaddr.IPNetwork(cidr)
-            # 严格筛选：只保留 IPv4 网段，剔除误入的 IPv6
+            # 严格过滤，确保只有 IPv4
             if net.version == 4:
                 ip_networks.append(net)
         except Exception:
             pass
 
-    # 一次性高速去重与重叠网段合并
+    # 高速批量去重与相邻网段合并
     cn_ipset = netaddr.IPSet(ip_networks)
     cidrs = cn_ipset.iter_cidrs()
     
     print(f"✅ 整合完成！精简合并为 {len(cn_ipset.iter_cidrs())} 个核心 IPv4 网段。")
 
-    print("🔨 正在构建纯 IPv4 版 GeoIP-CN.mmdb ...")
-    # 明确指定为纯 IPv4 模式，免去 IPv6 映射开销
+    print("🔨 正在写入纯 IPv4 版 GeoIP-CN.mmdb ...")
     writer = MMDBWriter(ip_version=4)
 
     for cidr in cidrs:
+        # mmdb_writer 标准接口规范要求传入 netaddr.IPSet
         writer.insert_network(netaddr.IPSet([cidr]), {'country': {'iso_code': 'CN'}})
 
     writer.to_db_file("GeoIP-CN.mmdb")
-    print("🚀 纯 IPv4 GeoIP-CN.mmdb 极速构建完成！")
+    print("🚀 GeoIP-CN.mmdb 极速构建完成！")
 
 if __name__ == "__main__":
     fast_merge()
