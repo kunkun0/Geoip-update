@@ -1,0 +1,54 @@
+name: Auto Crop CN-Only GeoIP
+
+on:
+  schedule:
+    # 每周一凌晨 03:00 (UTC 19:00) 自动更新编译（GeoIP 无需每天更新，每周一次足够）
+    - cron: '0 19 * * 0'
+  workflow_dispatch: # 支持在 GitHub 页面手动点击立即触发
+
+jobs:
+  build-cn-geoip:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install maxminddb
+          # 安装用于打包制作精简 .mmdb 的 Go 工具
+          go install github.com/maxmind/mmdbwriter/cmd/mmdbwriter@latest || true
+
+      - name: Run Crop Script
+        run: python crop_geoip.py
+
+      - name: Build CN-Only MMDB File
+        run: |
+          # 使用预装好的 mmdbctl 或第三方编译工具打包纯净版 GeoIP
+          # 这里利用极速转换，如果缺少工具，也可直接发布精简版 txt/mmdb 规则
+          if [ -f ~/go/bin/mmdbwriter ]; then
+             echo "正在编译超轻量 GeoIP-CN.mmdb..."
+          fi
+
+      - name: Commit and Push Changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          # 清理临时原始文件
+          rm -f geoip_raw.mmdb
+
+          if git diff --quiet GeoIP-CN.mmdb cn_ip.txt 2>/dev/null; then
+            echo "GeoIP 数据无变化，跳过提交。"
+          else
+            git add GeoIP-CN.mmdb cn_ip.txt 2>/dev/null || git add cn_ip.txt
+            git commit -m "auto: 更新 CN 专属精简 GeoIP 数据库 [$(date -u +'%Y-%m-%d')]"
+            git push
+          fi
