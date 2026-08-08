@@ -1,10 +1,10 @@
-name: Auto Merge Multi-Source CN GeoIP
+name: Auto Merge Multi-Source CN GeoIP (Weekly)
 
 on:
   schedule:
-    # 每 5 天凌晨 03:00 (UTC 19:00) 自动抓取多源并重新打包
-    - cron: '0 19 */2 * *'
-  workflow_dispatch:
+    # 每周日 UTC 19:00 (北京时间每周一凌晨 03:00) 自动触发
+    - cron: '0 19 * * 0'
+  workflow_dispatch: # 支持手动点按触发
 
 permissions:
   contents: write
@@ -35,13 +35,12 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-          # 清理运行过程中产生的临时文件
-          rm -f tmp_*.mmdb
+          # 强制暂存生成的 GeoIP-CN.mmdb 文件
+          git add GeoIP-CN.mmdb
 
-          if git diff --quiet GeoIP-CN.mmdb 2>/dev/null; then
+          if git diff --cached --quiet; then
             echo "GeoIP 数据无变化，跳过提交。"
           else
-            git add GeoIP-CN.mmdb
-            git commit -m "auto: 整合多源最新 CN GeoIP 数据 [$(date -u +'%Y-%m-%d %H:%M UTC')]"
+            git commit -m "auto: 周更纯 IPv4 CN GeoIP 数据库 [$(date -u +'%Y-%m-%d %H:%M UTC')]"
             git push
           fi
